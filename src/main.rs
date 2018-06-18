@@ -37,7 +37,7 @@ fn parse_operand<'a, T, I>(parts: &mut I) -> T
 }
 
 struct CallFrame {
-    inst_ptr: u32,
+    program_counter: u32,
     stack: Vec<u32>,
     locals: Vec<u32>,
 }
@@ -45,7 +45,7 @@ struct CallFrame {
 impl CallFrame {
     fn with_locals(locals: Vec<u32>) -> Self {
         Self {
-            inst_ptr: 0,
+            program_counter: 0,
             stack: vec![],
             locals,
         }
@@ -75,18 +75,20 @@ fn execute_assembly(asm: &Assembly) {
     while !call_stack.is_empty() {
         let result = {
             let (caller, caller_frame) = call_stack.last_mut().unwrap();
-            match execute(caller, caller_frame) {
-                ExecutionStatus::Call(func_idx) => {
-                    let callee = &asm.functions[func_idx as usize];
-                    let mut locals = callee.default_locals.clone();
-                    for idx in 0..callee.args {
-                        locals[idx as usize] = caller_frame.pop().unwrap();
+            loop {
+                match step(caller, caller_frame) {
+                    ExecutionStatus::Normal => (),
+                    ExecutionStatus::Call(func_idx) => {
+                        let callee = &asm.functions[func_idx as usize];
+                        let mut locals = callee.default_locals.clone();
+                        for idx in 0..callee.args {
+                            locals[idx as usize] = caller_frame.pop().unwrap();
+                        }
+                        let callee_frame = CallFrame::with_locals(locals);
+                        break Some((callee, callee_frame))
                     }
-                    let callee_frame = CallFrame::with_locals(locals);
-                    Some((callee, callee_frame))
-                }
-                ExecutionStatus::Return => {
-                    None
+                    ExecutionStatus::Return => break None,
+                    ExecutionStatus::Breakpoint => print_debug_info(caller, caller_frame),
                 }
             }
         };
@@ -334,62 +336,60 @@ impl Loader {
 enum ExecutionStatus {
     Call(u16),
     Return,
+    Normal,
+    Breakpoint,
 }
 
-fn execute(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
-    loop {
-        if frame.inst_ptr as usize >= function.body.len() {
-            println!("Exit.");
-            break;
-        }
-
-        match function.body[frame.inst_ptr as usize] {
-            Inst::Add => {
-                let value2 = frame.pop().unwrap();
-                let value1 = frame.pop().unwrap();
-                frame.push(value2 + value1);
-            }
-            Inst::Jump(target) => {
-                frame.inst_ptr = target;
-                continue;
-            }
-            Inst::Beq(target) => {
-                let value2 = frame.pop().unwrap();
-                let value1 = frame.pop().unwrap();
-                if value1 == value2 {
-                    frame.inst_ptr = target;
-                    continue;
-                }
-            }
-            Inst::Ldarg(n) => {
-                let value = frame.locals[n as usize];
-                frame.push(value);
-            }
-            Inst::Starg(n) => {
-                frame.locals[n as usize] = frame.pop().unwrap();
-            }
-            Inst::Call(idx) => {
-                frame.inst_ptr += 1;
-                return ExecutionStatus::Call(idx);
-            }
-            Inst::Ret => {
-                frame.inst_ptr += 1;
-                break;
-            }
-            Inst::Breakpoint => {
-                print_debug_info(function, frame)
-            },
-        }
-        frame.inst_ptr += 1;
+fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
+    if frame.program_counter as usize >= function.body.len() {
+        return ExecutionStatus::Return;
     }
-
-    ExecutionStatus::Return
+    match function.body[frame.program_counter as usize] {
+        Inst::Add => {
+            let value2 = frame.pop().unwrap();
+            let value1 = frame.pop().unwrap();
+            frame.push(value2 + value1);
+        }
+        Inst::Jump(target) => {
+            frame.program_counter = target;
+            return ExecutionStatus::Normal;
+        }
+        Inst::Beq(target) => {
+            let value2 = frame.pop().unwrap();
+            let value1 = frame.pop().unwrap();
+            if value1 == value2 {
+                frame.program_counter = target;
+                return ExecutionStatus::Normal;
+            }
+        }
+        Inst::Ldarg(n) => {
+            let value = frame.locals[n as usize];
+            frame.push(value);
+        }
+        Inst::Starg(n) => {
+            frame.locals[n as usize] = frame.pop().unwrap();
+        }
+        Inst::Call(idx) => {
+            frame.program_counter += 1;
+            return ExecutionStatus::Call(idx);
+        }
+        Inst::Ret => {
+            frame.program_counter += 1;
+            return ExecutionStatus::Return;
+        }
+        Inst::Breakpoint => {
+            frame.program_counter += 1;
+            return ExecutionStatus::Breakpoint;
+        },
+    }
+    frame.program_counter += 1;
+    ExecutionStatus::Normal
 }
 
 fn print_debug_info(function: &FuncDef, frame: &CallFrame) -> () {
     println!("Code:");
     for (idx, val) in function.body.iter().enumerate() {
-        let pc = frame.inst_ptr as usize;
+        let pc = frame.program_counter as usize;
         println!("{} [{:0>4}] {}", if idx == pc { ">" } else { " " }, idx, val);
     }
     println!("Locals:");
