@@ -92,8 +92,10 @@ fn execute_assembly(asm: &Assembly) {
 
         match result {
             Some((callee, callee_frame)) => {
-                let (caller, _caller_frame) = call_stack.pop().unwrap();
-                eprintln!("Calling '{}' from '{}'", callee.name, caller.name);
+                {
+                    let (caller, _caller_frame) = call_stack.last().unwrap();
+                    eprintln!("Calling '{}' from '{}'", callee.name, caller.name);
+                }
                 call_stack.push((callee, callee_frame));
             },
             None => {
