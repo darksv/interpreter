@@ -4,7 +4,7 @@
 .local 1 21
 ldarg 0
 ldarg 1
-call 1
+call name1
 starg 2
 breakpoint
 ret
@@ -14,7 +14,7 @@ ret
 ldarg 0
 ldarg 1
 add
-call 2
+call inc
 starg 2
 ret
 

@@ -130,6 +130,7 @@ struct Loader {
     label_offsets: std::collections::HashMap<String, usize>,
     labels: Vec<String>,
     current_func: Option<FuncDef>,
+    called_names: Vec<String>,
 }
 
 struct Assembly {
@@ -155,6 +156,7 @@ impl Loader {
             label_offsets: std::collections::HashMap::new(),
             labels: Vec::new(),
             current_func: None,
+            called_names: Vec::new(),
         }
     }
 
@@ -179,9 +181,32 @@ impl Loader {
             }
         }
         self.save_func();
+        self.adjust_calls();
         Assembly {
             name: path.into(),
             functions: self.functions.clone(),
+        }
+    }
+
+    fn adjust_calls(&mut self) {
+        let mut changes = vec![];
+        for (caller_idx, caller )in self.functions.iter().enumerate() {
+            for (inst_idx, inst) in caller.body.iter().enumerate() {
+                if let Inst::Call(fake_idx) = inst {
+                    let callee_name = &self.called_names[*fake_idx as usize];
+                    let real_idx = self.functions.iter()
+                        .position(|x| &x.name == callee_name)
+                        .map(|idx| idx as u16)
+                        .expect("no such func");
+                    changes.push((caller_idx, inst_idx, real_idx))
+                }
+            }
+        }
+
+        for (caller_idx, inst_idx, real_callee_idx) in changes {
+            if let Inst::Call(ref mut callee_idx) = self.functions[caller_idx].body[inst_idx] {
+                *callee_idx = real_callee_idx;
+            }
         }
     }
 
@@ -283,7 +308,10 @@ impl Loader {
             }
             "add" => Inst::Add,
             "breakpoint" => Inst::Breakpoint,
-            "call" => Inst::Call(parse_operand(&mut parts)),
+            "call" => {
+                self.called_names.push(parts.next().unwrap().into());
+                Inst::Call((self.called_names.len() - 1) as u16)
+            },
             "ret" => Inst::Ret,
             other => unreachable!("{}", other),
         };
