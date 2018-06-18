@@ -390,12 +390,18 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
     ExecutionStatus::Normal
 }
 
-fn print_debug_info(function: &FuncDef, frame: &CallFrame) -> () {
+fn print_debug_info(function: &FuncDef, frame: &CallFrame) {
     println!("Code:");
     for (idx, val) in function.body.iter().enumerate() {
         let pc = frame.program_counter as usize;
         println!("{} [{:0>4}] {}", if idx == pc { ">" } else { " " }, idx, val);
     }
+
+    println!("Stack:");
+    for (idx, value) in frame.stack.iter().enumerate() {
+        println!("  [{:0>4}] 0x{:0>8x}", frame.stack.len() - idx - 1, value);
+    }
+
     println!("Locals:");
     for (idx, value) in frame.locals.iter().enumerate() {
         println!("  [{:0>4}] 0x{:0>8x}", idx, value);
