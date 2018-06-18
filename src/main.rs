@@ -68,8 +68,9 @@ fn main() {
 }
 
 fn execute_assembly(asm: &Assembly) {
+    let main = asm.functions.first().unwrap();
     let mut call_stack = vec![
-        (&asm.functions[0], CallFrame::with_locals(vec![1, 2, 3, 4, 5])),
+        (main, CallFrame::with_locals(vec![1; main.locals as usize])),
     ];
     while !call_stack.is_empty() {
         let result = {
@@ -77,7 +78,7 @@ fn execute_assembly(asm: &Assembly) {
             match execute(caller, caller_frame) {
                 ExecutionStatus::Call(func_idx) => {
                     let callee = &asm.functions[func_idx as usize];
-                    let mut locals = vec![0; 5];
+                    let mut locals = vec![0; callee.locals as usize];
                     for idx in 0..callee.args {
                         locals[idx as usize] = caller_frame.pop().unwrap();
                     }
@@ -119,6 +120,7 @@ struct FuncDef {
     name: String,
     args: u16,
     returns: bool,
+    locals: u16,
     body: Vec<Inst>,
 }
 
@@ -138,7 +140,7 @@ struct Assembly {
 fn print_assembly(asm: &Assembly) {
     println!("Assembly '{}':", &asm.name);
     for (idx, func) in asm.functions.iter().enumerate() {
-        println!(" Function #{} '{}':", idx, func.name);
+        println!(" Function #{} '{}' - locals: {}:", idx, func.name, func.locals);
         for val in func.body.iter() {
             println!("  {}", val);
         }
@@ -211,18 +213,32 @@ impl Loader {
 
     fn process_meta(&mut self, line: &str) {
         let mut parts = line.split(' ');
-        if parts.next().unwrap() == "func" {
-            self.save_func();
-            self.current_func = Some(FuncDef {
-                name: parts.next().unwrap().into(),
-                args: parts.next().unwrap().parse().unwrap(),
-                returns: parts.next().unwrap().parse().unwrap(),
-                body: Vec::new(),
-            });
+        match parts.next().unwrap() {
+            "func" => {
+                self.save_func();
 
-            self.pending_labels.clear();
-            self.labels.clear();
-            self.label_offsets.clear();
+                let name = parts.next().unwrap().into();
+                let args = parts.next().unwrap().parse().unwrap();
+                let returns = parts.next().unwrap().parse().unwrap();
+
+                self.current_func = Some(FuncDef {
+                    name,
+                    args,
+                    returns,
+                    body: Vec::new(),
+                    locals: args + if returns {1} else {0},
+                });
+
+                self.pending_labels.clear();
+                self.labels.clear();
+                self.label_offsets.clear();
+            },
+            "locals" => {
+                if let Some(ref mut func) = self.current_func {
+                    func.locals = parts.next().unwrap().parse().unwrap();
+                }
+            },
+            unknown => eprintln!("unknown meta: '{}'", unknown)
         }
     }
 
