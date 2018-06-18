@@ -70,7 +70,7 @@ fn main() {
 fn execute_assembly(asm: &Assembly) {
     let main = asm.functions.first().unwrap();
     let mut call_stack = vec![
-        (main, CallFrame::with_locals(vec![1; main.locals as usize])),
+        (main, CallFrame::with_locals(main.default_locals.clone())),
     ];
     while !call_stack.is_empty() {
         let result = {
@@ -78,7 +78,7 @@ fn execute_assembly(asm: &Assembly) {
             match execute(caller, caller_frame) {
                 ExecutionStatus::Call(func_idx) => {
                     let callee = &asm.functions[func_idx as usize];
-                    let mut locals = vec![0; callee.locals as usize];
+                    let mut locals = callee.default_locals.clone();
                     for idx in 0..callee.args {
                         locals[idx as usize] = caller_frame.pop().unwrap();
                     }
@@ -120,7 +120,7 @@ struct FuncDef {
     name: String,
     args: u16,
     returns: bool,
-    locals: u16,
+    default_locals: Vec<u32>,
     body: Vec<Inst>,
 }
 
@@ -140,7 +140,7 @@ struct Assembly {
 fn print_assembly(asm: &Assembly) {
     println!("Assembly '{}':", &asm.name);
     for (idx, func) in asm.functions.iter().enumerate() {
-        println!(" Function #{} '{}' - locals: {}:", idx, func.name, func.locals);
+        println!(" Function #{} '{}' - locals: {}:", idx, func.name, func.default_locals.len());
         for val in func.body.iter() {
             println!("  {}", val);
         }
@@ -226,7 +226,7 @@ impl Loader {
                     args,
                     returns,
                     body: Vec::new(),
-                    locals: args + if returns {1} else {0},
+                    default_locals: Vec::new(),
                 });
 
                 self.pending_labels.clear();
@@ -235,9 +235,17 @@ impl Loader {
             },
             "locals" => {
                 if let Some(ref mut func) = self.current_func {
-                    func.locals = parts.next().unwrap().parse().unwrap();
+                    let count = parts.next().unwrap().parse().unwrap();
+                    func.default_locals = vec![0; count];
                 }
             },
+            "local" => {
+                let idx: u16 = parts.next().unwrap().parse().unwrap();
+                let value =  parts.next().unwrap().parse().unwrap();
+                if let Some(ref mut func) = self.current_func {
+                    func.default_locals[idx as usize] = value;
+                }
+            }
             unknown => eprintln!("unknown meta: '{}'", unknown)
         }
     }
@@ -247,7 +255,11 @@ impl Loader {
             self.save_pending_labels();
             self.adjust_branches();
         }
-        if let Some(func) = self.current_func.take() {
+        if let Some(mut func) = self.current_func.take() {
+            let default_locals = func.args + if func.returns {1} else {0};
+            if (default_locals as usize) > func.default_locals.len() {
+                func.default_locals.resize(default_locals as usize, 0);
+            }
             self.functions.push(func);
         }
     }
