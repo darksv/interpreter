@@ -73,18 +73,14 @@ fn execute_assembly(asm: &Assembly) {
         (main, CallFrame::with_locals(main.default_locals.clone())),
     ];
     while !call_stack.is_empty() {
-        let result = {
-            let (caller, caller_frame) = call_stack.last_mut().unwrap();
+        let callee = {
+            let (caller, ref mut caller_frame) = call_stack.last_mut().unwrap();
             loop {
                 match step(caller, caller_frame) {
                     ExecutionStatus::Normal => (),
-                    ExecutionStatus::Call(func_idx) => {
-                        let callee = &asm.functions[func_idx as usize];
-                        let mut locals = callee.default_locals.clone();
-                        for idx in 0..callee.args {
-                            locals[idx as usize] = caller_frame.pop().unwrap();
-                        }
-                        let callee_frame = CallFrame::with_locals(locals);
+                    ExecutionStatus::Call(callee_idx) => {
+                        let callee = &asm.functions[callee_idx as usize];
+                        let callee_frame = prepare_frame_for_callee(callee, caller_frame);
                         break Some((callee, callee_frame))
                     }
                     ExecutionStatus::Return => break None,
@@ -93,7 +89,7 @@ fn execute_assembly(asm: &Assembly) {
             }
         };
 
-        match result {
+        match callee {
             Some((callee, callee_frame)) => {
                 {
                     let (caller, _caller_frame) = call_stack.last().unwrap();
@@ -115,6 +111,14 @@ fn execute_assembly(asm: &Assembly) {
             }
         }
     }
+}
+
+fn prepare_frame_for_callee(callee: &FuncDef, caller_frame: &mut CallFrame) -> CallFrame {
+    let mut locals = callee.default_locals.clone();
+    for idx in 0..callee.args {
+        locals[idx as usize] = caller_frame.pop().unwrap();
+    }
+    CallFrame::with_locals(locals)
 }
 
 #[derive(Clone)]
