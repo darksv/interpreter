@@ -176,7 +176,7 @@ impl Loader {
                 self.process_instruction(&line);
             }
         }
-
+        self.save_func();
         Assembly {
             name: path.into(),
             functions: self.functions.clone(),
@@ -210,17 +210,9 @@ impl Loader {
     }
 
     fn process_meta(&mut self, line: &str) {
-        if self.current_func.is_some() {
-            self.save_pending_labels();
-            self.adjust_branches();
-        }
-
-        if let Some(func) = self.current_func.take() {
-            self.functions.push(func);
-        }
-
         let mut parts = line.split(' ');
         if parts.next().unwrap() == "func" {
+            self.save_func();
             self.current_func = Some(FuncDef {
                 name: parts.next().unwrap().into(),
                 args: parts.next().unwrap().parse().unwrap(),
@@ -231,6 +223,16 @@ impl Loader {
             self.pending_labels.clear();
             self.labels.clear();
             self.label_offsets.clear();
+        }
+    }
+
+    fn save_func(&mut self) {
+        if self.current_func.is_some() {
+            self.save_pending_labels();
+            self.adjust_branches();
+        }
+        if let Some(func) = self.current_func.take() {
+            self.functions.push(func);
         }
     }
 

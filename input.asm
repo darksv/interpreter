@@ -12,5 +12,3 @@ ldarg 1
 add
 starg 2
 ret
-
-.func iksde 0 false
