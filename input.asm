@@ -13,7 +13,7 @@ ret
 .locals 3
 ldarg 0
 ldarg 1
-add
+add.u
 call inc
 starg 2
 ret
@@ -23,6 +23,6 @@ ret
 .local 2 1
 ldarg 0
 ldarg 2
-add
+add.u
 starg 1
 ret

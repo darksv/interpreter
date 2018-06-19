@@ -86,16 +86,23 @@ pub fn execute_assembly(asm: &Assembly) {
     }
 }
 
+macro_rules! binary_op {
+    ($frame:expr, $op:expr) => {{
+        let value2 = $frame.pop().unwrap() as _;
+        let value1 = $frame.pop().unwrap() as _;
+        $frame.push($op(value2, value1) as u32);
+    }}
+}
+
 fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
     if frame.program_counter as usize >= function.body.len() {
         return ExecutionStatus::Return;
     }
     match function.body[frame.program_counter as usize] {
-        Inst::add => {
-            let value2 = frame.pop().unwrap();
-            let value1 = frame.pop().unwrap();
-            frame.push(value2 + value1);
-        }
+        Inst::add_u => binary_op!(frame, |a: u32, b: u32| a + b),
+        Inst::add_s => binary_op!(frame, |a: i32, b: i32| a + b),
+        Inst::sub_u => binary_op!(frame, |a: u32, b: u32| a - b),
+        Inst::sub_s => binary_op!(frame, |a: i32, b: i32| a - b),
         Inst::jump(target) => {
             frame.program_counter = target;
             return ExecutionStatus::Normal;
@@ -131,6 +138,8 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
     frame.program_counter += 1;
     ExecutionStatus::Normal
 }
+
+
 
 fn print_debug_info(function: &FuncDef, frame: &CallFrame) {
     println!("Code:");

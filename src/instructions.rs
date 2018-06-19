@@ -5,7 +5,10 @@ use ::std::fmt;
 pub enum Inst {
     ldarg(u8),
     starg(u8),
-    add,
+    add_u,
+    add_s,
+    sub_u,
+    sub_s,
     jump(u32),
     beq(u32),
     breakpoint,
@@ -16,7 +19,10 @@ pub enum Inst {
 impl fmt::Display for Inst {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            &Inst::add => write!(f, "add")?,
+            &Inst::add_u => write!(f, "add.u")?,
+            &Inst::add_s => write!(f, "add.s")?,
+            &Inst::sub_u => write!(f, "sub.u")?,
+            &Inst::sub_s => write!(f, "sub.s")?,
             &Inst::jump(dst) => write!(f, "jump {}", dst)?,
             &Inst::beq(dst) => write!(f, "beq {}", dst)?,
             &Inst::ldarg(idx) => write!(f, "ldarg {}", idx)?,

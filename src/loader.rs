@@ -170,7 +170,10 @@ impl Loader {
                 let label = parts.next().unwrap();
                 Inst::beq(self.save_label(label) as u32)
             }
-            "add" => Inst::add,
+            "add.u" => Inst::add_u,
+            "add.s" => Inst::add_s,
+            "sub.u" => Inst::sub_s,
+            "sub.s" => Inst::sub_s,
             "breakpoint" => Inst::breakpoint,
             "call" => {
                 self.called_names.push(parts.next().unwrap().into());
