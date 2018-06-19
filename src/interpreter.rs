@@ -41,9 +41,9 @@ enum ExecutionStatus {
 }
 
 pub fn execute_assembly(asm: &Assembly) {
-    let main = asm.functions.first().unwrap();
+    let entry = asm.get_entry();
     let mut call_stack = vec![
-        (main, CallFrame::with_locals(main.default_locals.clone())),
+        (entry, CallFrame::with_locals(entry.default_locals.clone())),
     ];
     while !call_stack.is_empty() {
         let callee = {

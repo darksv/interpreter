@@ -4,6 +4,7 @@ use super::instructions::Inst;
 use super::assembly::{Assembly, FuncDef};
 
 pub struct Loader {
+    entry: Option<u16>,
     functions: Vec<FuncDef>,
     pending_labels: Vec<String>,
     label_offsets: HashMap<String, usize>,
@@ -15,6 +16,7 @@ pub struct Loader {
 impl Loader {
     pub fn new() -> Self {
         Self {
+            entry: None,
             functions: Vec::new(),
             pending_labels: Vec::new(),
             label_offsets: HashMap::new(),
@@ -47,6 +49,7 @@ impl Loader {
         self.save_func();
         self.fill_call_placeholders();
         Assembly {
+            entry: self.entry.expect("no entry point defined"),
             name: path.into(),
             functions: self.functions.clone(),
         }
@@ -68,6 +71,8 @@ impl Loader {
                 *callee_idx = real_callee_idx;
             }
         }
+
+        self.entry = self.entry.map(|idx| self.get_real_func_index(idx));;
     }
 
     fn get_real_func_index(&self, fake_idx: u16) -> u16 {
@@ -138,6 +143,10 @@ impl Loader {
                 if let Some(ref mut func) = self.current_func {
                     func.default_locals[idx as usize] = value;
                 }
+            }
+            "entry" => {
+                let func_name = parts.next().unwrap();
+                self.entry = Some(self.get_placeholder_for_func(func_name) as u16);
             }
             unknown => eprintln!("unknown meta: '{}'", unknown)
         }

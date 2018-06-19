@@ -1,3 +1,5 @@
+.entry main
+
 .func main 0 false
 .locals 3
 .local 0 8
