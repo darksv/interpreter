@@ -91,16 +91,16 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
         return ExecutionStatus::Return;
     }
     match function.body[frame.program_counter as usize] {
-        Inst::Add => {
+        Inst::add => {
             let value2 = frame.pop().unwrap();
             let value1 = frame.pop().unwrap();
             frame.push(value2 + value1);
         }
-        Inst::Jump(target) => {
+        Inst::jump(target) => {
             frame.program_counter = target;
             return ExecutionStatus::Normal;
         }
-        Inst::Beq(target) => {
+        Inst::beq(target) => {
             let value2 = frame.pop().unwrap();
             let value1 = frame.pop().unwrap();
             if value1 == value2 {
@@ -108,22 +108,22 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
                 return ExecutionStatus::Normal;
             }
         }
-        Inst::Ldarg(n) => {
+        Inst::ldarg(n) => {
             let value = frame.locals[n as usize];
             frame.push(value);
         }
-        Inst::Starg(n) => {
+        Inst::starg(n) => {
             frame.locals[n as usize] = frame.pop().unwrap();
         }
-        Inst::Call(idx) => {
+        Inst::call(idx) => {
             frame.program_counter += 1;
             return ExecutionStatus::Call(idx);
         }
-        Inst::Ret => {
+        Inst::ret => {
             frame.program_counter += 1;
             return ExecutionStatus::Return;
         }
-        Inst::Breakpoint => {
+        Inst::breakpoint => {
             frame.program_counter += 1;
             return ExecutionStatus::Breakpoint;
         }

@@ -56,7 +56,7 @@ impl Loader {
         let mut changes = vec![];
         for (caller_idx, caller) in self.functions.iter().enumerate() {
             for (inst_idx, inst) in caller.body.iter().enumerate() {
-                if let Inst::Call(fake_idx) = inst {
+                if let Inst::call(fake_idx) = inst {
                     let callee_name = &self.called_names[*fake_idx as usize];
                     let real_idx = self.functions.iter()
                         .position(|x| &x.name == callee_name)
@@ -68,7 +68,7 @@ impl Loader {
         }
 
         for (caller_idx, inst_idx, real_callee_idx) in changes {
-            if let Inst::Call(ref mut callee_idx) = self.functions[caller_idx].body[inst_idx] {
+            if let Inst::call(ref mut callee_idx) = self.functions[caller_idx].body[inst_idx] {
                 *callee_idx = real_callee_idx;
             }
         }
@@ -78,8 +78,8 @@ impl Loader {
         let mut changes = vec![];
         for (index, inst) in self.current_func.as_ref().unwrap().body.iter().enumerate() {
             let new_inst = match *inst {
-                Inst::Jump(idx) => Inst::Jump(self.get_real_offset(idx)),
-                Inst::Beq(idx) => Inst::Beq(self.get_real_offset(idx)),
+                Inst::jump(idx) => Inst::jump(self.get_real_offset(idx)),
+                Inst::beq(idx) => Inst::beq(self.get_real_offset(idx)),
                 _ => continue,
             };
             changes.push((index, new_inst));
@@ -160,23 +160,23 @@ impl Loader {
     fn process_instruction(&mut self, line: &str) {
         let mut parts = line.split(' ');
         let op = match parts.next().unwrap_or("") {
-            "ldarg" => Inst::Ldarg(parse_operand(&mut parts)),
-            "starg" => Inst::Starg(parse_operand(&mut parts)),
+            "ldarg" => Inst::ldarg(parse_operand(&mut parts)),
+            "starg" => Inst::starg(parse_operand(&mut parts)),
             "jump" => {
                 let label = parts.next().unwrap();
-                Inst::Jump(self.save_label(label) as u32)
+                Inst::jump(self.save_label(label) as u32)
             }
             "beq" => {
                 let label = parts.next().unwrap();
-                Inst::Beq(self.save_label(label) as u32)
+                Inst::beq(self.save_label(label) as u32)
             }
-            "add" => Inst::Add,
-            "breakpoint" => Inst::Breakpoint,
+            "add" => Inst::add,
+            "breakpoint" => Inst::breakpoint,
             "call" => {
                 self.called_names.push(parts.next().unwrap().into());
-                Inst::Call((self.called_names.len() - 1) as u16)
+                Inst::call((self.called_names.len() - 1) as u16)
             }
-            "ret" => Inst::Ret,
+            "ret" => Inst::ret,
             other => unreachable!("{}", other),
         };
 
