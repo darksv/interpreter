@@ -172,7 +172,7 @@ impl Loader {
             }
             "add.u" => Inst::add_u,
             "add.s" => Inst::add_s,
-            "sub.u" => Inst::sub_s,
+            "sub.u" => Inst::sub_u,
             "sub.s" => Inst::sub_s,
             "breakpoint" => Inst::breakpoint,
             "call" => {
