@@ -39,29 +39,25 @@ impl Loader {
             if line.starts_with('.') {
                 self.process_meta(&line[1..]);
             } else if line.ends_with(':') {
-                self.process_label(&line[..line.len() - 1]);
+                self.parse_label(&line[..line.len() - 1]);
             } else {
-                self.process_instruction(&line);
+                self.parse_instruction(&line);
             }
         }
         self.save_func();
-        self.adjust_calls();
+        self.fill_call_placeholders();
         Assembly {
             name: path.into(),
             functions: self.functions.clone(),
         }
     }
 
-    fn adjust_calls(&mut self) {
+    fn fill_call_placeholders(&mut self) {
         let mut changes = vec![];
         for (caller_idx, caller) in self.functions.iter().enumerate() {
             for (inst_idx, inst) in caller.body.iter().enumerate() {
                 if let Inst::call(fake_idx) = inst {
-                    let callee_name = &self.called_names[*fake_idx as usize];
-                    let real_idx = self.functions.iter()
-                        .position(|x| &x.name == callee_name)
-                        .map(|idx| idx as u16)
-                        .expect("no such func");
+                    let real_idx = self.get_real_func_index(*fake_idx);
                     changes.push((caller_idx, inst_idx, real_idx))
                 }
             }
@@ -74,12 +70,20 @@ impl Loader {
         }
     }
 
-    fn adjust_branches(&mut self) {
+    fn get_real_func_index(&self, fake_idx: u16) -> u16 {
+        let callee_name = &self.called_names[fake_idx as usize];
+        self.functions.iter()
+            .position(|x| &x.name == callee_name)
+            .map(|idx| idx as u16)
+            .expect("no such func")
+    }
+
+    fn fill_branching_placeholders(&mut self) {
         let mut changes = vec![];
         for (index, inst) in self.current_func.as_ref().unwrap().body.iter().enumerate() {
             let new_inst = match *inst {
-                Inst::jump(idx) => Inst::jump(self.get_real_offset(idx)),
-                Inst::beq(idx) => Inst::beq(self.get_real_offset(idx)),
+                Inst::jump(idx) => Inst::jump(self.get_real_instruction_offset(idx)),
+                Inst::beq(idx) => Inst::beq(self.get_real_instruction_offset(idx)),
                 _ => continue,
             };
             changes.push((index, new_inst));
@@ -89,7 +93,7 @@ impl Loader {
         }
     }
 
-    fn get_real_offset(&self, idx: u32) -> u32 {
+    fn get_real_instruction_offset(&self, idx: u32) -> u32 {
         self.label_offsets[&self.labels[idx as usize]] as u32
     }
 
@@ -142,7 +146,7 @@ impl Loader {
     fn save_func(&mut self) {
         if self.current_func.is_some() {
             self.save_pending_labels();
-            self.adjust_branches();
+            self.fill_branching_placeholders();
         }
         if let Some(mut func) = self.current_func.take() {
             let default_locals = func.args + if func.returns { 1 } else { 0 };
@@ -153,22 +157,22 @@ impl Loader {
         }
     }
 
-    fn process_label(&mut self, label: &str) {
+    fn parse_label(&mut self, label: &str) {
         self.pending_labels.push(label.to_owned());
     }
 
-    fn process_instruction(&mut self, line: &str) {
+    fn parse_instruction(&mut self, line: &str) {
         let mut parts = line.split(' ');
         let op = match parts.next().unwrap_or("") {
             "ldarg" => Inst::ldarg(parse_operand(&mut parts)),
             "starg" => Inst::starg(parse_operand(&mut parts)),
             "jump" => {
                 let label = parts.next().unwrap();
-                Inst::jump(self.save_label(label) as u32)
+                Inst::jump(self.get_placeholder_for_label(label) as u32)
             }
             "beq" => {
                 let label = parts.next().unwrap();
-                Inst::beq(self.save_label(label) as u32)
+                Inst::beq(self.get_placeholder_for_label(label) as u32)
             }
             "add.u" => Inst::add_u,
             "add.s" => Inst::add_s,
@@ -176,9 +180,9 @@ impl Loader {
             "sub.s" => Inst::sub_s,
             "breakpoint" => Inst::breakpoint,
             "call" => {
-                self.called_names.push(parts.next().unwrap().into());
-                Inst::call((self.called_names.len() - 1) as u16)
-            }
+                let func_name = parts.next().unwrap();
+                Inst::call(self.get_placeholder_for_func(func_name) as u16)
+            },
             "ret" => Inst::ret,
             other => unreachable!("{}", other),
         };
@@ -187,13 +191,21 @@ impl Loader {
         self.current_func.as_mut().unwrap().body.push(op);
     }
 
-    fn save_label(&mut self, label: &str) -> usize {
-        match self.labels.iter().position(|x| x == label) {
-            Some(idx) => idx,
-            None => {
-                self.labels.push(label.to_owned());
-                self.labels.len() - 1
-            }
+    fn get_placeholder_for_func(&mut self, name: &str) -> usize {
+        get_index_for(&mut self.called_names, name)
+    }
+
+    fn get_placeholder_for_label(&mut self, label: &str) -> usize {
+        get_index_for(&mut self.labels, label)
+    }
+}
+
+fn get_index_for(set: &mut Vec<String>, value: &str) -> usize {
+    match set.iter().position(|x| x == value) {
+        Some(idx) => idx,
+        None => {
+            set.push(value.to_owned());
+            set.len() - 1
         }
     }
 }
