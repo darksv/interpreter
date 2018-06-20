@@ -187,6 +187,10 @@ impl Loader {
             "add.s" => Inst::add_s,
             "sub.u" => Inst::sub_u,
             "sub.s" => Inst::sub_s,
+            "mul.u" => Inst::mul_u,
+            "mul.s" => Inst::mul_s,
+            "div.u" => Inst::div_u,
+            "div.s" => Inst::div_s,
             "breakpoint" => Inst::breakpoint,
             "call" => {
                 let func_name = parts.next().unwrap();

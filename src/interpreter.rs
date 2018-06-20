@@ -103,6 +103,10 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
         Inst::add_s => binary_op!(frame, |a: i32, b: i32| a + b),
         Inst::sub_u => binary_op!(frame, |a: u32, b: u32| a - b),
         Inst::sub_s => binary_op!(frame, |a: i32, b: i32| a - b),
+        Inst::mul_u => binary_op!(frame, |a: u32, b: u32| a * b),
+        Inst::mul_s => binary_op!(frame, |a: i32, b: i32| a * b),
+        Inst::div_u => binary_op!(frame, |a: u32, b: u32| a / b),
+        Inst::div_s => binary_op!(frame, |a: i32, b: i32| a / b),
         Inst::jump(target) => {
             frame.program_counter = target;
             return ExecutionStatus::Normal;
