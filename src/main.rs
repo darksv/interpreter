@@ -8,7 +8,7 @@ use assembly::print_assembly;
 
 fn main() {
     let mut loader = Loader::new();
-    let asm = loader.load("input.asm");
+    let asm = loader.load("tests/input.asm");
     print_assembly(&asm);
     execute_assembly(&asm)
 }
