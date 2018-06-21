@@ -1,10 +1,8 @@
-mod loader;
-use loader::Loader;
-mod interpreter;
-use interpreter::execute_assembly;
-mod instructions;
-mod assembly;
-use assembly::print_assembly;
+extern crate vm;
+
+use vm::assembly::print_assembly;
+use vm::loader::Loader;
+use vm::interpreter::execute_assembly;
 
 fn main() {
     let mut loader = Loader::new();
