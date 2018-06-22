@@ -1,35 +1,55 @@
 use super::instructions::Inst;
-use super::assembly::{Assembly, FuncDef};
+use super::assembly::{Assembly, FuncDef, ManagedFuncDef};
 
-struct CallFrame {
+struct ManagedCallFrame {
     program_counter: u32,
     stack: Vec<u32>,
     locals: Vec<u32>,
 }
 
-impl CallFrame {
+enum CallFrame {
+    Managed(ManagedCallFrame),
+    Native,
+}
+
+impl ManagedCallFrame {
     fn with_locals(locals: Vec<u32>) -> Self {
-        Self {
+        ManagedCallFrame {
             program_counter: 0,
             stack: vec![],
             locals,
         }
     }
 
-    fn push(&mut self, value: u32) {
-        self.stack.push(value);
-    }
-
-    fn pop(&mut self) -> Option<u32> {
-        self.stack.pop()
-    }
-
-    fn create_frame_for_callee(&mut self, callee: &FuncDef) -> CallFrame {
+    fn create_frame_for_callee(&mut self, callee: &ManagedFuncDef) -> ManagedCallFrame {
         let mut locals = callee.default_locals.clone();
         for idx in 0..callee.args {
-            locals[idx as usize] = self.pop().unwrap();
+            locals[idx as usize] = self.stack.pop().unwrap();
         }
-        CallFrame::with_locals(locals)
+        Self::with_locals(locals)
+    }
+}
+
+impl CallFrame {
+    fn by_func(def: &FuncDef) -> CallFrame {
+        match def {
+            FuncDef::Managed(def) => CallFrame::Managed(ManagedCallFrame::with_locals(def.default_locals.clone())),
+            FuncDef::Native(_def) => CallFrame::Native,
+        }
+    }
+
+    fn as_managed(&self) -> Option<&ManagedCallFrame> {
+        match *self {
+            CallFrame::Managed(ref frame) => Some(frame),
+            CallFrame::Native => None,
+        }
+    }
+
+    fn as_managed_mut(&mut self) -> Option<&mut ManagedCallFrame> {
+        match *self {
+            CallFrame::Managed(ref mut frame) => Some(frame),
+            CallFrame::Native => None,
+        }
     }
 }
 
@@ -43,21 +63,23 @@ enum ExecutionStatus {
 pub fn execute_assembly(asm: &Assembly) {
     let entry = asm.get_entry();
     let mut call_stack = vec![
-        (entry, CallFrame::with_locals(entry.default_locals.clone())),
+        (entry, CallFrame::by_func(entry)),
     ];
     while !call_stack.is_empty() {
         let callee = {
             let (caller, ref mut caller_frame) = call_stack.last_mut().unwrap();
             loop {
-                match step(caller, caller_frame) {
+                let caller = caller.as_managed().unwrap();
+                let caller_frame = caller_frame.as_managed_mut().unwrap();
+                match step_managed(caller, caller_frame) {
                     ExecutionStatus::Normal => (),
                     ExecutionStatus::Call(callee_idx) => {
                         let callee = &asm.functions[callee_idx as usize];
-                        let callee_frame = caller_frame.create_frame_for_callee(callee);
+                        let callee_frame = caller_frame.create_frame_for_callee(callee.as_managed().unwrap());
                         break Some((callee, callee_frame));
                     }
                     ExecutionStatus::Return => break None,
-                    ExecutionStatus::Breakpoint => print_debug_info(caller, caller_frame),
+                    ExecutionStatus::Breakpoint => print_managed_debug_info(caller, caller_frame),
                 }
             }
         };
@@ -66,16 +88,19 @@ pub fn execute_assembly(asm: &Assembly) {
             Some((callee, callee_frame)) => {
                 {
                     let (caller, _caller_frame) = call_stack.last().unwrap();
-                    eprintln!("Calling '{}' from '{}'", callee.name, caller.name);
+                    eprintln!("Calling '{}' from '{}'", callee.name(), caller.name());
                 }
-                call_stack.push((callee, callee_frame));
+                call_stack.push((callee, CallFrame::Managed(callee_frame)));
             }
             None => {
                 let (callee, callee_frame) = call_stack.pop().unwrap();
+                let callee = callee.as_managed().unwrap();
+                let callee_frame = callee_frame.as_managed().unwrap();
                 if callee.returns {
                     let result = callee_frame.locals[callee.args as usize];
                     if let Some((_, ref mut caller_frame)) = call_stack.last_mut() {
-                        caller_frame.push(result);
+                        let caller_frame = caller_frame.as_managed_mut().unwrap();
+                        caller_frame.stack.push(result);
                     }
                     eprintln!("Returning from '{}' with result '{}'", callee.name, result);
                 } else {
@@ -88,13 +113,13 @@ pub fn execute_assembly(asm: &Assembly) {
 
 macro_rules! binary_op {
     ($frame:expr, $op:expr) => {{
-        let value2 = $frame.pop().unwrap() as _;
-        let value1 = $frame.pop().unwrap() as _;
-        $frame.push($op(value2, value1) as u32);
+        let value2 = $frame.stack.pop().unwrap() as _;
+        let value1 = $frame.stack.pop().unwrap() as _;
+        $frame.stack.push($op(value2, value1) as u32);
     }}
 }
 
-fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
+fn step_managed(function: &ManagedFuncDef, frame: &mut ManagedCallFrame) -> ExecutionStatus {
     if frame.program_counter as usize >= function.body.len() {
         return ExecutionStatus::Return;
     }
@@ -112,8 +137,8 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
             return ExecutionStatus::Normal;
         }
         Inst::beq(target) => {
-            let value2 = frame.pop().unwrap();
-            let value1 = frame.pop().unwrap();
+            let value2 = frame.stack.pop().unwrap();
+            let value1 = frame.stack.pop().unwrap();
             if value1 == value2 {
                 frame.program_counter = target;
                 return ExecutionStatus::Normal;
@@ -121,10 +146,10 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
         }
         Inst::ldarg(n) => {
             let value = frame.locals[n as usize];
-            frame.push(value);
+            frame.stack.push(value);
         }
         Inst::starg(n) => {
-            frame.locals[n as usize] = frame.pop().unwrap();
+            frame.locals[n as usize] = frame.stack.pop().unwrap();
         }
         Inst::call(idx) => {
             frame.program_counter += 1;
@@ -143,9 +168,7 @@ fn step(function: &FuncDef, frame: &mut CallFrame) -> ExecutionStatus {
     ExecutionStatus::Normal
 }
 
-
-
-fn print_debug_info(function: &FuncDef, frame: &CallFrame) {
+fn print_managed_debug_info(function: &ManagedFuncDef, frame: &ManagedCallFrame) {
     println!("Code:");
     for (idx, val) in function.body.iter().enumerate() {
         let pc = frame.program_counter as usize;

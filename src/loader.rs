@@ -1,7 +1,7 @@
 use ::std::collections::HashMap;
 use ::std::str::FromStr;
 use super::instructions::Inst;
-use super::assembly::{Assembly, FuncDef};
+use super::assembly::{Assembly, FuncDef, ManagedFuncDef};
 
 pub struct Loader {
     entry: Option<u16>,
@@ -9,7 +9,7 @@ pub struct Loader {
     pending_labels: Vec<String>,
     label_offsets: HashMap<String, usize>,
     labels: Vec<String>,
-    current_func: Option<FuncDef>,
+    current_func: Option<ManagedFuncDef>,
     called_names: Vec<String>,
 }
 
@@ -58,16 +58,18 @@ impl Loader {
     fn fill_call_placeholders(&mut self) {
         let mut changes = vec![];
         for (caller_idx, caller) in self.functions.iter().enumerate() {
-            for (inst_idx, inst) in caller.body.iter().enumerate() {
-                if let Inst::call(fake_idx) = inst {
-                    let real_idx = self.get_real_func_index(*fake_idx);
-                    changes.push((caller_idx, inst_idx, real_idx))
+            if let FuncDef::Managed(caller) = caller {
+                for (inst_idx, inst) in caller.body.iter().enumerate() {
+                    if let Inst::call(fake_idx) = inst {
+                        let real_idx = self.get_real_func_index(*fake_idx);
+                        changes.push((caller_idx, inst_idx, real_idx))
+                    }
                 }
             }
         }
 
         for (caller_idx, inst_idx, real_callee_idx) in changes {
-            if let Inst::call(ref mut callee_idx) = self.functions[caller_idx].body[inst_idx] {
+            if let Inst::call(ref mut callee_idx) = self.functions[caller_idx].as_managed_mut().unwrap().body[inst_idx] {
                 *callee_idx = real_callee_idx;
             }
         }
@@ -78,7 +80,7 @@ impl Loader {
     fn get_real_func_index(&self, fake_idx: u16) -> u16 {
         let callee_name = &self.called_names[fake_idx as usize];
         self.functions.iter()
-            .position(|x| &x.name == callee_name)
+            .position(|x| x.name() == callee_name)
             .map(|idx| idx as u16)
             .expect("no such func")
     }
@@ -119,7 +121,7 @@ impl Loader {
                 let args = parts.next().unwrap().parse().unwrap();
                 let returns = parts.next().unwrap().parse().unwrap();
 
-                self.current_func = Some(FuncDef {
+                self.current_func = Some(ManagedFuncDef {
                     name,
                     args,
                     returns,
@@ -162,7 +164,7 @@ impl Loader {
             if (default_locals as usize) > func.default_locals.len() {
                 func.default_locals.resize(default_locals as usize, 0);
             }
-            self.functions.push(func);
+            self.functions.push(FuncDef::Managed(func));
         }
     }
 
