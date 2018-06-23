@@ -111,12 +111,16 @@ pub fn execute_assembly(asm: &Assembly) {
     }
 }
 
-macro_rules! binary_op {
-    ($frame:expr, $op:expr) => {{
-        let value2 = $frame.stack.pop().unwrap() as _;
-        let value1 = $frame.stack.pop().unwrap() as _;
-        $frame.stack.push($op(value2, value1) as u32);
-    }}
+use num::cast::{FromPrimitive, ToPrimitive};
+
+#[inline(always)]
+fn binary<T>(frame: &mut ManagedCallFrame, operator: fn(T, T) -> T)
+    where T: ToPrimitive + FromPrimitive
+{
+    let value2 = frame.stack.pop().and_then(FromPrimitive::from_u32).unwrap();
+    let value1 = frame.stack.pop().and_then(FromPrimitive::from_u32).unwrap();
+    let result = operator(value2, value1).to_u32().unwrap();
+    frame.stack.push(result);
 }
 
 fn step_managed(function: &ManagedFuncDef, frame: &mut ManagedCallFrame) -> ExecutionStatus {
@@ -124,14 +128,14 @@ fn step_managed(function: &ManagedFuncDef, frame: &mut ManagedCallFrame) -> Exec
         return ExecutionStatus::Return;
     }
     match function.body[frame.program_counter as usize] {
-        Inst::add_u => binary_op!(frame, |a: u32, b: u32| a + b),
-        Inst::add_s => binary_op!(frame, |a: i32, b: i32| a + b),
-        Inst::sub_u => binary_op!(frame, |a: u32, b: u32| a - b),
-        Inst::sub_s => binary_op!(frame, |a: i32, b: i32| a - b),
-        Inst::mul_u => binary_op!(frame, |a: u32, b: u32| a * b),
-        Inst::mul_s => binary_op!(frame, |a: i32, b: i32| a * b),
-        Inst::div_u => binary_op!(frame, |a: u32, b: u32| a / b),
-        Inst::div_s => binary_op!(frame, |a: i32, b: i32| a / b),
+        Inst::add_u => binary::<u32>(frame, |a, b| a + b),
+        Inst::add_s => binary::<i32>(frame, |a, b| a + b),
+        Inst::sub_u => binary::<u32>(frame, |a, b| a - b),
+        Inst::sub_s => binary::<i32>(frame, |a, b| a - b),
+        Inst::mul_u => binary::<u32>(frame, |a, b| a * b),
+        Inst::mul_s => binary::<i32>(frame, |a, b| a * b),
+        Inst::div_u => binary::<u32>(frame, |a, b| a / b),
+        Inst::div_s => binary::<i32>(frame, |a, b| a / b),
         Inst::jump(target) => {
             frame.program_counter = target;
             return ExecutionStatus::Normal;
