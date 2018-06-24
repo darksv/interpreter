@@ -34,6 +34,15 @@ enum CallFrame<'a> {
     Native(&'a NativeFuncDef),
 }
 
+impl<'a> CallFrame<'a> {
+    fn name(&self) -> &'a str {
+        match self {
+            CallFrame::Managed(func, _) => &func.name,
+            CallFrame::Native(func) => &func.name,
+        }
+    }
+}
+
 enum ExecutionStatus {
     Call(u16),
     Return,
@@ -47,32 +56,32 @@ pub fn execute_assembly(asm: &Assembly) {
         CallFrame::Managed(entry, ManagedCallFrame::by_func(entry))
     ];
     while !call_stack.is_empty() {
-        let callee = match call_stack.last_mut().unwrap() {
+        let callee_frame = match call_stack.last_mut().unwrap() {
             CallFrame::Managed(caller, ref mut caller_frame) => {
                 run_managed_until_call(&asm, &caller, caller_frame)
             }
-            CallFrame::Native(_) => unimplemented!(),
+            CallFrame::Native(_) => {
+                None
+            },
         };
 
-        match callee {
-            Some((callee, callee_frame)) => {
+        match callee_frame {
+            Some(callee_frame) => {
                 match call_stack.last().unwrap() {
                     CallFrame::Managed(caller, _caller_frame) => {
-                        eprintln!("Calling '{}' from '{}'", callee.name(), caller.name);
+                        eprintln!("Calling '{}' from '{}'", callee_frame.name(), caller.name);
                     }
                     CallFrame::Native(_) => unimplemented!(),
                 }
-                let callee_frame = match callee {
-                    FuncDef::Managed(ref callee) => CallFrame::Managed(callee, callee_frame),
-                    FuncDef::Native(ref callee) => CallFrame::Native(callee),
-                };
                 call_stack.push(callee_frame);
             }
             None => match call_stack.pop().unwrap() {
                 CallFrame::Managed(callee, callee_frame) => {
                     finish_managed_call(&mut call_stack, callee, callee_frame)
                 }
-                CallFrame::Native(_) => unimplemented!(),
+                CallFrame::Native(callee) => {
+                    finish_native_call(&mut call_stack, callee)
+                },
             },
         }
     }
@@ -95,14 +104,29 @@ fn finish_managed_call(call_stack: &mut Vec<CallFrame>, callee: &ManagedFuncDef,
     }
 }
 
-fn run_managed_until_call<'a>(asm: &'a Assembly, caller: &ManagedFuncDef, caller_frame: &mut ManagedCallFrame) -> Option<(&'a FuncDef, ManagedCallFrame)> {
+fn finish_native_call(_call_stack: &mut Vec<CallFrame>, callee: &NativeFuncDef) {
+    if callee.returns {
+        unimplemented!();
+    } else {
+        eprintln!("Returning from '{}'", callee.name);
+    }
+}
+
+fn run_managed_until_call<'a>(asm: &'a Assembly, caller: &ManagedFuncDef, caller_frame: &mut ManagedCallFrame) -> Option<CallFrame<'a>> {
     loop {
         match step_managed(caller, caller_frame) {
             ExecutionStatus::Normal => (),
             ExecutionStatus::Call(callee_idx) => {
                 let callee = &asm.functions[callee_idx as usize];
-                let callee_frame = caller_frame.create_frame_for_callee(callee.as_managed().unwrap());
-                break Some((callee, callee_frame));
+                let callee_frame = match callee {
+                    FuncDef::Managed(ref callee) => {
+                        CallFrame::Managed(callee, caller_frame.create_frame_for_callee(callee))
+                    },
+                    FuncDef::Native(ref callee) => {
+                        CallFrame::Native(callee)
+                    }
+                };
+                break Some(callee_frame)
             }
             ExecutionStatus::Return => break None,
             ExecutionStatus::Breakpoint => print_managed_debug_info(caller, caller_frame),

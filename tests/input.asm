@@ -9,6 +9,7 @@ ldarg 1
 call name1
 starg 2
 breakpoint
+call debug
 ret
 
 .func name1 2 true
