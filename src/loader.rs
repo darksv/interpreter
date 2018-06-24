@@ -1,7 +1,7 @@
 use ::std::collections::HashMap;
 use ::std::str::FromStr;
 use super::instructions::Inst;
-use super::assembly::{Assembly, FuncDef, ManagedFuncDef};
+use super::assembly::{Assembly, FuncDef, ManagedFuncDef, NativeFuncDef};
 
 pub struct Loader {
     entry: Option<u16>,
@@ -145,6 +145,19 @@ impl Loader {
                 if let Some(ref mut func) = self.current_func {
                     func.default_locals[idx as usize] = value;
                 }
+            }
+            "import" => {
+                self.save_func();
+
+                let name = parts.next().unwrap().into();
+                let args = parts.next().unwrap().parse().unwrap();
+                let returns = parts.next().unwrap().parse().unwrap();
+
+                self.functions.push(FuncDef::Native(NativeFuncDef {
+                    name,
+                    args,
+                    returns,
+                }));
             }
             "entry" => {
                 let func_name = parts.next().unwrap();

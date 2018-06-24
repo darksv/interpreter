@@ -28,3 +28,5 @@ ldarg 2
 add.u
 starg 1
 ret
+
+.import debug 1 false

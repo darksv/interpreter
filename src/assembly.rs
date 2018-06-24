@@ -60,10 +60,16 @@ pub struct NativeFuncDef {
 pub fn print_assembly(asm: &Assembly) {
     println!("Assembly '{}' with entry point '{}':", &asm.name, asm.get_entry().name());
     for (idx, func) in asm.functions.iter().enumerate() {
-        let func = func.as_managed().unwrap();
-        println!(" Function #{} '{}' - locals: {}:", idx, func.name, func.default_locals.len());
-        for val in func.body.iter() {
-            println!("  {}", val);
+        match func {
+            FuncDef::Managed(func) => {
+                println!(" Function #{} '{}' - managed with locals: {}:", idx, func.name, func.default_locals.len());
+                for val in func.body.iter() {
+                    println!("  {}", val);
+                }
+            },
+            FuncDef::Native(func) => {
+                println!(" Function #{} '{}' - imported native", idx, func.name);
+            }
         }
     }
 }
