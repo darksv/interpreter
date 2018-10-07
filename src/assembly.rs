@@ -19,7 +19,7 @@ pub enum FuncDef {
 }
 
 impl FuncDef {
-    pub fn name<'a>(&'a self) -> &'a str {
+    pub fn name(&self) -> &str {
         match self {
             FuncDef::Managed(ManagedFuncDef { name, .. }) => &name,
             FuncDef::Native(NativeFuncDef { name, .. }) => &name,
