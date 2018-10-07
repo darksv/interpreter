@@ -5,3 +5,4 @@ authors = ["darksv <darek969-12@o2.pl>"]
 
 [dependencies]
 num = "^0.1"
+rand = "0.5.5"

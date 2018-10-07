@@ -9,7 +9,10 @@ ldarg 1
 call name1
 starg 2
 breakpoint
-call debug
+call random
+call random
+add.u
+breakpoint
 ret
 
 .func name1 2 true
@@ -30,4 +33,4 @@ add.u
 starg 1
 ret
 
-.import debug 1 false
+.import random 0 true
